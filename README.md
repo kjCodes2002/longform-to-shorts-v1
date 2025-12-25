@@ -21,9 +21,9 @@ This repository is under active development and is primarily used for exploratio
 ## 📁 Project Structure
 
 longform-to-shorts-v1/
-├── src/ # main (stable) implementation
-├── experiments/ # trial and exploratory code
-├── scripts/ # helper scripts
+├── src/
+├── experiments/
+├── scripts/
 └── README.md
 
 - `src/` contains the current working pipeline
