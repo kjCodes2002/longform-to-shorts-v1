@@ -1,8 +1,7 @@
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+import tiktoken
 
 load_dotenv()
 
@@ -15,63 +14,66 @@ with open("./audio/audio2.m4a", "rb") as audio_file:
         response_format="verbose_json"
     )
 
-transcript = ""
+class TranscriptChunk:
+    def __init__(self, start_time, end_time, text, chunk_index):
+        self.start_time = start_time
+        self.end_time = end_time
+        self.text = text
+        self.chunk_index = chunk_index
+
+data = []
+
+encoding = tiktoken.get_encoding("cl100k_base")
+def token_count(text: str) -> int:
+    return len(encoding.encode(text))
+
+MAX_TOKENS = 500  
+chunk_index = 0
+
+current_text = ""
+current_tokens = 0
+chunk_start_time = None
+chunk_end_time = None
 
 for segment in result.segments:
     start = segment.start
     end = segment.end
-    text = segment.text
-    transcript += f"[{start:.2f} → {end:.2f}] {text}\n"
+    text = segment.text.strip().replace("\n", " ")
+    segment_tokens = token_count(text)
 
-geminiClient = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    if chunk_start_time is None:
+        chunk_start_time = start
 
-SYSTEM_PROMPT = """You are an expert content analyst and editor.
+    if current_tokens + segment_tokens <= MAX_TOKENS:
+        current_text += " " + text if current_text else text
+        current_tokens += segment_tokens
+        chunk_end_time = end
+    else:
+        data.append(
+            TranscriptChunk(
+                start_time=chunk_start_time,
+                end_time=chunk_end_time,
+                text=current_text.strip(),
+                chunk_index=chunk_index
+            )
+        )
 
-You will be given a transcript consisting of multiple lines, each with a timestamp and spoken text.
+        chunk_index += 1
 
-Your task is to:
+        current_text = text
+        current_tokens = segment_tokens
+        chunk_start_time = start
+        chunk_end_time = end
 
-Understand the overall context and topic of the transcript.
-
-Identify the most important, insightful, or value-dense lines from the transcript — the parts that best capture the core ideas, arguments, or takeaways.
-
-Select only the minimal set of lines that are sufficient to convey the most valuable essence of the transcript.
-
-Selection rules:
-
-Choose lines that contain key ideas, conclusions, insights, or turning points.
-
-Prefer substance over filler, repetition, anecdotes, or small talk.
-
-Preserve the original wording and timestamps exactly as given.
-
-Do not paraphrase or rewrite selected lines.
-
-Do not invent or infer timestamps.
-
-Output format:
-
-First, provide a brief 2–3 sentence summary describing the overall context/topic.
-
-Then, list the selected transcript lines, each on a new line, in chronological order, keeping their original timestamps.
-
-Constraints:
-
-Be selective: fewer, high-value lines are better than many mediocre ones.
-
-The selected lines should be sufficient for someone to understand the core message without reading the full transcript.
-
-Do not include any lines outside the provided transcript.
-
-Your goal is to extract signal from noise and surface the most meaningful parts of the conversation."""
-
-response = geminiClient.models.generate_content(
-    model="gemini-2.5-flash",
-    contents=[transcript],
-    config=types.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT,
-        temperature=0.5,
+if current_text:
+    data.append(
+        TranscriptChunk(
+            start_time=chunk_start_time,
+            end_time=chunk_end_time,
+            text=current_text.strip(),
+            chunk_index=chunk_index
+        )
     )
-)
 
-print(response.text)
+for item in data:
+    print(f"{item.chunk_index} {item.start_time}->{item.end_time}: {item.text}\n")
