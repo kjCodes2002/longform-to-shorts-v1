@@ -2,6 +2,8 @@ from openai import OpenAI
 import os
 from dotenv import load_dotenv
 import tiktoken
+import faiss
+import numpy as np
 
 load_dotenv()
 
@@ -93,5 +95,11 @@ for chunk in data:
         "chunk_index": chunk.chunk_index
     })
 
-for item in embeddings:
-    print(len(item["vector"]))
+vectors = np.array([item["vector"] for item in embeddings], dtype="float32")
+
+dimension = vectors.shape[1]
+index = faiss.IndexFlatL2(dimension)
+index.add(vectors)
+print(index.ntotal)
+
+
