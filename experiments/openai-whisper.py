@@ -27,7 +27,7 @@ encoding = tiktoken.get_encoding("cl100k_base")
 def token_count(text: str) -> int:
     return len(encoding.encode(text))
 
-MAX_TOKENS = 500  
+MAX_TOKENS = 100  
 chunk_index = 0
 
 current_text = ""
@@ -75,5 +75,23 @@ if current_text:
         )
     )
 
-for item in data:
-    print(f"{item.chunk_index} {item.start_time}->{item.end_time}: {item.text}\n")
+embeddings = []
+
+for chunk in data:
+    response = openaiClient.embeddings.create(
+        model="text-embedding-3-small",
+        input=chunk.text
+    )
+
+    vector = response.data[0].embedding
+
+    embeddings.append({
+        "vector": vector,
+        "text": chunk.text,
+        "start_time": chunk.start_time,
+        "end_time": chunk.end_time,
+        "chunk_index": chunk.chunk_index
+    })
+
+for item in embeddings:
+    print(len(item["vector"]))
