@@ -100,6 +100,61 @@ vectors = np.array([item["vector"] for item in embeddings], dtype="float32")
 dimension = vectors.shape[1]
 index = faiss.IndexFlatL2(dimension)
 index.add(vectors)
-print(index.ntotal)
 
+# Embedding the user query
+def embed_query(query: str):
+    response = openaiClient.embeddings.create(
+        model="text-embedding-3-small",
+        input=query
+    )
+    return np.array([response.data[0].embedding], dtype="float32")
 
+# Retrieve relevant chunks using FAISS
+def retrieve_chunks(query: str, k=4):
+    query_vector = embed_query(query)
+    distances, indices = index.search(query_vector, k)
+
+    return [embeddings[i] for i in indices[0]]
+
+# Construct a grounded prompt
+def build_prompt(query, retrieved_chunks):
+    context = ""
+
+    for chunk in retrieved_chunks:
+        context += (
+            f"[{chunk['start_time']}s – {chunk['end_time']}s]\n"
+            f"{chunk['text']}\n\n"
+        )
+
+    return f"""
+You are an assistant answering questions strictly based on the provided transcript context.
+
+Transcript context:
+{context}
+
+Question:
+{query}
+
+Instructions:
+- Answer ONLY using the transcript context.
+- If the answer is not present, say "Not mentioned in the video."
+- Be concise and factual.
+"""
+
+# Ask the LLM
+def ask_llm(prompt):
+    response = openaiClient.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    return response.choices[0].message.content
+
+def answer_question(query):
+    retrieved = retrieve_chunks(query)
+    prompt = build_prompt(query, retrieved)
+    return ask_llm(prompt)
+
+print(answer_question("What is the speaker talking about?"))
