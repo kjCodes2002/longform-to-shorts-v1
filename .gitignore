@@ -2,3 +2,7 @@ audio
 myenv
 .DS_Store
 .env
+.cache/
+__pycache__/
+*.py[cod]
+*$py.class

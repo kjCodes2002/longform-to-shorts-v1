@@ -1,20 +1,55 @@
-from openai import OpenAI
 import os
+import json
+import hashlib
 from dotenv import load_dotenv
 import tiktoken
 import faiss
 import numpy as np
+from openai import OpenAI
 
 load_dotenv()
 
 openaiClient = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-with open("./audio/audio2.m4a", "rb") as audio_file:
-    result = openaiClient.audio.transcriptions.create(
-        file=audio_file,
-        model="whisper-1",
-        response_format="verbose_json"
-    )
+AUDIO_PATH = "./audio/audio2.m4a"
+CACHE_DIR = "./.cache"
+
+if not os.path.exists(CACHE_DIR):
+    os.makedirs(CACHE_DIR)
+
+def get_file_hash(filepath):
+    hasher = hashlib.md5()
+    with open(filepath, 'rb') as f:
+        buf = f.read()
+        hasher.update(buf)
+    return hasher.hexdigest()
+
+def get_cached_transcription(audio_path):
+    file_hash = get_file_hash(audio_path)
+    cache_file = os.path.join(CACHE_DIR, f"transcription_{file_hash}.json")
+    
+    if os.path.exists(cache_file):
+        print(f"Loading cached transcription for {audio_path}...")
+        with open(cache_file, 'r') as f:
+            return json.load(f)
+    
+    print(f"Transcribing {audio_path}...")
+    with open(audio_path, "rb") as audio_file:
+        response = openaiClient.audio.transcriptions.create(
+            file=audio_file,
+            model="whisper-1",
+            response_format="verbose_json"
+        )
+        # Convert response to dict for JSON serialization
+        result_dict = response.model_dump()
+        with open(cache_file, 'w') as f:
+            json.dump(result_dict, f)
+        return result_dict
+
+result_data = get_cached_transcription(AUDIO_PATH)
+# Wrap result in a SimpleNamespace or dot-accessible object if needed, 
+# but here we'll just use dict access or adapt the loop.
+# The previous code used result.segments. result_data is a dict now.
 
 class TranscriptChunk:
     def __init__(self, start_time, end_time, text, chunk_index):
@@ -29,71 +64,101 @@ encoding = tiktoken.get_encoding("cl100k_base")
 def token_count(text: str) -> int:
     return len(encoding.encode(text))
 
-MAX_TOKENS = 100  
+MAX_TOKENS = 150  
+OVERLAP_TOKENS = 30
 chunk_index = 0
 
-current_text = ""
+data = []
+current_chunks = [] # List of segments in current chunk
 current_tokens = 0
-chunk_start_time = None
-chunk_end_time = None
 
-for segment in result.segments:
-    start = segment.start
-    end = segment.end
-    text = segment.text.strip().replace("\n", " ")
-    segment_tokens = token_count(text)
+segments = result_data.get('segments', [])
 
-    if chunk_start_time is None:
-        chunk_start_time = start
+i = 0
+while i < len(segments):
+    segment = segments[i]
+    text = segment['text'].strip().replace("\n", " ")
+    tokens = token_count(text)
+    
+    current_chunks.append(segment)
+    current_tokens += tokens
+    
+    # If we exceed MAX_TOKENS, create a chunk and backtrack for overlap
+    if current_tokens >= MAX_TOKENS:
+        chunk_text = " ".join([s['text'].strip() for s in current_chunks])
+        data.append(TranscriptChunk(
+            start_time=current_chunks[0]['start'],
+            end_time=current_chunks[-1]['end'],
+            text=chunk_text,
+            chunk_index=len(data)
+        ))
+        
+        # Backtrack logic for overlap: 
+        # Find how many segments to keep for next chunk to satisfy OVERLAP_TOKENS
+        overlap_count = 0
+        overlap_tokens_accum = 0
+        for j in range(len(current_chunks) - 1, -1, -1):
+            s_tokens = token_count(current_chunks[j]['text'])
+            if overlap_tokens_accum + s_tokens <= OVERLAP_TOKENS:
+                overlap_tokens_accum += s_tokens
+                overlap_count += 1
+            else:
+                break
+        
+        if overlap_count > 0:
+            current_chunks = current_chunks[-overlap_count:]
+            current_tokens = overlap_tokens_accum
+        else:
+            current_chunks = []
+            current_tokens = 0
+            
+    i += 1
 
-    if current_tokens + segment_tokens <= MAX_TOKENS:
-        current_text += " " + text if current_text else text
-        current_tokens += segment_tokens
-        chunk_end_time = end
-    else:
-        data.append(
-            TranscriptChunk(
-                start_time=chunk_start_time,
-                end_time=chunk_end_time,
-                text=current_text.strip(),
-                chunk_index=chunk_index
-            )
-        )
+# Final chunk
+if current_chunks:
+    chunk_text = " ".join([s['text'].strip() for s in current_chunks])
+    data.append(TranscriptChunk(
+        start_time=current_chunks[0]['start'],
+        end_time=current_chunks[-1]['end'],
+        text=chunk_text,
+        chunk_index=len(data)
+    ))
 
-        chunk_index += 1
+print(f"Created {len(data)} chunks with overlap.")
 
-        current_text = text
-        current_tokens = segment_tokens
-        chunk_start_time = start
-        chunk_end_time = end
-
-if current_text:
-    data.append(
-        TranscriptChunk(
-            start_time=chunk_start_time,
-            end_time=chunk_end_time,
-            text=current_text.strip(),
-            chunk_index=chunk_index
-        )
-    )
-
-embeddings = []
-
-for chunk in data:
+def get_cached_embeddings(chunks, audio_path):
+    file_hash = get_file_hash(audio_path)
+    cache_file = os.path.join(CACHE_DIR, f"embeddings_{file_hash}.json")
+    
+    if os.path.exists(cache_file):
+        print("Loading cached embeddings...")
+        with open(cache_file, 'r') as f:
+            return json.load(f)
+    
+    print(f"Generating embeddings for {len(chunks)} chunks...")
+    texts = [c.text for c in chunks]
+    # OpenAI supports batching by passing a list of strings
     response = openaiClient.embeddings.create(
         model="text-embedding-3-small",
-        input=chunk.text
+        input=texts
     )
+    
+    embeddings_data = []
+    for i, chunk in enumerate(chunks):
+        embeddings_data.append({
+            "vector": response.data[i].embedding,
+            "text": chunk.text,
+            "start_time": chunk.start_time,
+            "end_time": chunk.end_time,
+            "chunk_index": chunk.chunk_index
+        })
+    
+    with open(cache_file, 'w') as f:
+        json.dump(embeddings_data, f)
+    
+    return embeddings_data
 
-    vector = response.data[0].embedding
-
-    embeddings.append({
-        "vector": vector,
-        "text": chunk.text,
-        "start_time": chunk.start_time,
-        "end_time": chunk.end_time,
-        "chunk_index": chunk.chunk_index
-    })
+embeddings = get_cached_embeddings(data, AUDIO_PATH)
 
 vectors = np.array([item["vector"] for item in embeddings], dtype="float32")
 
@@ -144,7 +209,7 @@ Instructions:
 # Ask the LLM
 def ask_llm(prompt):
     response = openaiClient.chat.completions.create(
-        model="gpt-4.1-mini",
+        model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": prompt}
@@ -157,4 +222,4 @@ def answer_question(query):
     prompt = build_prompt(query, retrieved)
     return ask_llm(prompt)
 
-print(answer_question("What is the speaker talking about?"))
+print(answer_question("Give the most important points of the transcript with timestamps"))
