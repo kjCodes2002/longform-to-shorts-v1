@@ -4,11 +4,10 @@ import hashlib
 from pathlib import Path
 
 def get_file_hash(filepath):
-    """Generates an MD5 hash of a file's content."""
     hasher = hashlib.md5()
-    with open(filepath, 'rb') as f:
-        buf = f.read()
-        hasher.update(buf)
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            hasher.update(chunk)
     return hasher.hexdigest()
 
 def get_cached_transcription(audio_path, client, cache_dir="./.cache"):
