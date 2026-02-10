@@ -7,11 +7,12 @@ import tiktoken
 import hashlib
 
 class TranscriptChunk:
-    def __init__(self, start_time, end_time, text, chunk_index):
+    def __init__(self, start_time, end_time, text, chunk_index, segments=None):
         self.start_time = start_time
         self.end_time = end_time
         self.text = text
         self.chunk_index = chunk_index
+        self.segments = segments or []  # Original Whisper segments with per-line timestamps
 
 def token_count(text: str, encoding_name="cl100k_base") -> int:
     encoding = tiktoken.get_encoding(encoding_name)
@@ -40,7 +41,8 @@ def chunk_transcript(segments, max_tokens=150, overlap_tokens=30):
                 start_time=current_chunks[0]['start'],
                 end_time=current_chunks[-1]['end'],
                 text=chunk_text,
-                chunk_index=len(data)
+                chunk_index=len(data),
+                segments=[{'start': s['start'], 'end': s['end'], 'text': s['text'].strip()} for s in current_chunks]
             ))
             
             # Backtrack for overlap
@@ -68,7 +70,8 @@ def chunk_transcript(segments, max_tokens=150, overlap_tokens=30):
             start_time=current_chunks[0]['start'],
             end_time=current_chunks[-1]['end'],
             text=chunk_text,
-            chunk_index=len(data)
+            chunk_index=len(data),
+            segments=[{'start': s['start'], 'end': s['end'], 'text': s['text'].strip()} for s in current_chunks]
         ))
     return data
 
@@ -99,7 +102,8 @@ def get_cached_embeddings(chunks, audio_path, client, cache_dir="./.cache"):
             "text": chunk.text,
             "start_time": chunk.start_time,
             "end_time": chunk.end_time,
-            "chunk_index": chunk.chunk_index
+            "chunk_index": chunk.chunk_index,
+            "segments": chunk.segments
         })
     
     with open(cache_file, 'w') as f:
