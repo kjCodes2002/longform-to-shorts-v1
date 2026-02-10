@@ -115,8 +115,9 @@ def setup_faiss_index(embeddings):
     index.add(vectors)
     return index
 
-def retrieve_chunks(query, index, embeddings, client, k=4):
+def retrieve_chunks(query, index, embeddings, client, k=10):
     """Retrieves context chunks for a given query."""
+    k = min(k, len(embeddings))  # Clamp k to available chunks
     response = client.embeddings.create(
         model="text-embedding-3-small",
         input=query

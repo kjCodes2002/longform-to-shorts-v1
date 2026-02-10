@@ -12,7 +12,7 @@ from scripts.rag_engine import (
     setup_faiss_index, 
     retrieve_chunks
 )
-from scripts.llm_assistant import build_prompt, ask_llm
+from scripts.llm_assistant import build_prompt, ask_llm, parse_llm_response
 
 def main():
     load_dotenv()
@@ -51,14 +51,25 @@ def main():
 
     # 5. Q&A Loop (or single question for demo)
     query = "Give the most important points of the transcript with timestamps"
+    n_answers = 3
     print(f"Query: {query}")
+    print(f"Requesting up to {n_answers} answers...")
     
     retrieved = retrieve_chunks(query, index, embeddings, client)
-    prompt = build_prompt(query, retrieved)
-    answer = ask_llm(prompt, client)
+    prompt = build_prompt(query, retrieved, n_answers=n_answers)
+    raw_answer = ask_llm(prompt, client)
+    answers = parse_llm_response(raw_answer)
     
-    print(f"\n--- Answer ---\n")
-    print(answer)
+    print(f"\n--- {len(answers)} Answer(s) Found ---\n")
+    for i, ans in enumerate(answers, 1):
+        start = ans.get('start_time')
+        end = ans.get('end_time')
+        timestamp = f"[{start}s – {end}s]" if start is not None else "[No timestamp]"
+        print(f"Answer {i}: {timestamp}")
+        print(f"  {ans['answer']}")
+        if ans.get('relevance'):
+            print(f"  Relevance: {ans['relevance']}")
+        print()
 
 if __name__ == "__main__":
     main()
