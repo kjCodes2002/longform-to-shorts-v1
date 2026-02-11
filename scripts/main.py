@@ -13,6 +13,8 @@ from scripts.rag_engine import (
     retrieve_chunks
 )
 from scripts.llm_assistant import build_prompt, ask_llm, get_multiple_answers
+from scripts.timestamp_parser import parse_timestamps
+from scripts.video_clipper import clip_video_segments
 
 def main():
     load_dotenv()
@@ -23,6 +25,7 @@ def main():
     video_path = project_root / "video" / "ffmpeg.mp4"
     audio_dir = project_root / "audio"
     cache_dir = project_root / ".cache"
+    clipped_dir = project_root / "clipped"
     
     print(f"--- Starting Orchestrator ---")
     
@@ -64,6 +67,22 @@ def main():
         print(f"  ANSWER {i} of {n_answers}")
         print(f"{'='*60}")
         print(answer)
+        print()
+        
+        # 6. Extract timestamps and clip video
+        print(f"Parsing timestamps for Answer {i}...")
+        segments = parse_timestamps(answer)
+        
+        if segments:
+            output_file = clipped_dir / f"answer_{i}_highlight.mp4"
+            print(f"Creating highlight video: {output_file.name}")
+            try:
+                clip_video_segments(str(video_path), segments, str(output_file))
+                print(f"Successfully saved {output_file.name}")
+            except Exception as e:
+                print(f"Error creating highlight video {i}: {e}")
+        else:
+            print(f"No timestamps found in Answer {i}. Skipping clipping.")
         print()
 
 if __name__ == "__main__":

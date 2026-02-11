@@ -23,10 +23,11 @@ Question:
 {query}
 
 Instructions:
-- Answer ONLY using the transcript context.
-- Include timestamps for each point you reference from the transcript.
+- Use the EXACT VERBATIM lines as they appear in the transcript.
+- DO NOT paraphrase, summarize, or modify the transcript text.
+- Each point in your answer must consist of a verbatim line from the transcript followed by its timestamp in [start.0s - end.0s] format.
 - If the answer is not present, say "Not mentioned in the video."
-- Be concise and factual.
+- Format as a list of bullet points.
 """
 
 def ask_llm(prompt, client, model="gpt-4o-mini", temperature=0.7):
