@@ -22,9 +22,9 @@ def extract_lines_from_answer(answer_text: str) -> list[str]:
         # Remove bullet marker
         line = line.lstrip("-").strip()
         # Remove surrounding quotes if present
-        line = line.strip('"').strip("'").strip(""").strip(""").strip()
+        line = line.strip('"').strip("'").strip("\u201c").strip("\u201d").strip()
         # Remove any trailing timestamp patterns like [0.0s – 7.8s]
-        line = re.sub(r'\s*[\[\(][\d.]+s?\s*[\-–—]\s*[\d.]+s?[\]\)]\s*$', '', line)
+        line = re.sub(r'\s*[\[\(][\d.]+s?\s*[\-\u2013\u2014]\s*[\d.]+s?[\]\)]\s*$', '', line)
         if line:
             lines.append(line)
     return lines
@@ -60,6 +60,37 @@ def match_lines_to_segments(
     return results
 
 
+def merge_overlapping_segments(
+    segments: list[tuple[float, float]],
+) -> list[tuple[float, float]]:
+    """
+    Sorts segments by start time and merges any that overlap or are adjacent.
+    This prevents the video clipper from replaying content when consecutive
+    matched segments share Whisper boundaries.
+
+    Args:
+        segments: List of (start, end) tuples.
+
+    Returns:
+        list[tuple[float, float]]: Merged, non-overlapping segments sorted by start time.
+    """
+    if not segments:
+        return []
+
+    sorted_segs = sorted(segments, key=lambda s: s[0])
+    merged = [sorted_segs[0]]
+
+    for start, end in sorted_segs[1:]:
+        prev_start, prev_end = merged[-1]
+        if start <= prev_end:
+            # Overlapping or adjacent — extend the previous segment
+            merged[-1] = (prev_start, max(prev_end, end))
+        else:
+            merged.append((start, end))
+
+    return merged
+
+
 def _find_best_match(
     line: str,
     segments: list[dict],
@@ -68,21 +99,22 @@ def _find_best_match(
     """
     Finds the best matching segment(s) for a given line.
     Handles three cases:
-      1. Line is a substring of one segment (exact containment).
+      1. Line is fully contained within a single segment.
       2. Line spans multiple consecutive segments.
       3. Fuzzy match fallback.
     """
     line_clean = line.strip().lower()
 
-    # --- Case 1: Exact substring match within a single segment ---
+    # --- Case 1: Line is fully contained within a single segment ---
+    # Only check if the line is INSIDE a segment (not the reverse).
     for seg in segments:
         seg_text = seg['text'].strip().lower()
-        if line_clean in seg_text or seg_text in line_clean:
+        if line_clean in seg_text:
             return (seg['start'], seg['end'], seg['text'].strip())
 
     # --- Case 2: Line spans multiple consecutive segments ---
     # Build a sliding window of consecutive segments
-    for window_size in range(2, min(5, len(segments) + 1)):
+    for window_size in range(2, min(6, len(segments) + 1)):
         for i in range(len(segments) - window_size + 1):
             window_segs = segments[i:i + window_size]
             combined_text = " ".join(s['text'].strip() for s in window_segs).lower()

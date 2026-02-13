@@ -13,7 +13,7 @@ from scripts.rag_engine import (
     retrieve_chunks
 )
 from scripts.llm_assistant import build_prompt, ask_llm, get_multiple_answers
-from scripts.segment_matcher import extract_lines_from_answer, match_lines_to_segments
+from scripts.segment_matcher import extract_lines_from_answer, match_lines_to_segments, merge_overlapping_segments
 from scripts.video_clipper import clip_video_segments
 
 def main():
@@ -53,7 +53,7 @@ def main():
     index = setup_faiss_index(embeddings)
 
     # 5. Q&A with multiple answer compilations
-    query = "Give the most important points of the transcript with timestamps"
+    query = "What is the speaker's opinion on security?"
     n_answers = 3
     print(f"Query: {query}")
     print(f"Generating {n_answers} answer compilations...\n")
@@ -82,17 +82,19 @@ def main():
         matched = match_lines_to_segments(lines, whisper_segments)
         
         if matched:
-            # Convert to (start, end) tuples for the clipper
-            segments_for_clip = [(start, end) for start, end, _ in matched]
+            # Convert to (start, end) tuples and merge overlapping segments
+            raw_segments = [(start, end) for start, end, _ in matched]
+            merged_segments = merge_overlapping_segments(raw_segments)
             
-            # Log the matched timestamps
-            for start, end, text in matched:
-                print(f"  [{start} -> {end}] {text[:70]}...")
+            # Log the merged timestamps
+            print(f"  Merged {len(raw_segments)} matches into {len(merged_segments)} non-overlapping segments:")
+            for start, end in merged_segments:
+                print(f"    [{start} -> {end}]")
             
             output_file = clipped_dir / f"answer_{i}_highlight.mp4"
             print(f"Creating highlight video: {output_file.name}")
             try:
-                clip_video_segments(str(video_path), segments_for_clip, str(output_file))
+                clip_video_segments(str(video_path), merged_segments, str(output_file))
                 print(f"Successfully saved {output_file.name}")
             except Exception as e:
                 print(f"Error creating highlight video {i}: {e}")
