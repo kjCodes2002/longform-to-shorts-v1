@@ -1,17 +1,15 @@
 def build_prompt(query, retrieved_chunks):
-    """Constructs the augmented prompt for the LLM."""
+    """Constructs the augmented prompt for the LLM. Timestamps are excluded
+    so the LLM focuses only on selecting verbatim text."""
     context = ""
     for chunk in retrieved_chunks:
-        # Use per-segment timestamps if available, otherwise fall back to chunk-level
+        # Use per-segment text if available, otherwise fall back to chunk-level
         if chunk.get('segments'):
             for seg in chunk['segments']:
-                context += f"[{seg['start']:.1f}s – {seg['end']:.1f}s] {seg['text']}\n"
+                context += f"{seg['text']}\n"
             context += "\n"
         else:
-            context += (
-                f"[{chunk['start_time']}s – {chunk['end_time']}s]\n"
-                f"{chunk['text']}\n\n"
-            )
+            context += f"{chunk['text']}\n\n"
 
     return f"""
 You are an assistant answering questions strictly based on the provided transcript context.
@@ -24,10 +22,11 @@ Question:
 
 Instructions:
 - Use the EXACT VERBATIM lines as they appear in the transcript.
-- DO NOT paraphrase, summarize, or modify the transcript text.
-- Each point in your answer must consist of a verbatim line from the transcript followed by its timestamp in [start.0s - end.0s] format.
+- DO NOT paraphrase, summarize, or modify the transcript text in any way.
+- DO NOT include any timestamps in your answer.
+- Each bullet point must be an exact, unmodified quote from the transcript.
 - If the answer is not present, say "Not mentioned in the video."
-- Format as a list of bullet points.
+- Format as a bulleted list using "- " prefix.
 """
 
 def ask_llm(prompt, client, model="gpt-4o-mini", temperature=0.7):

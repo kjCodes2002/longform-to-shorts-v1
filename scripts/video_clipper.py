@@ -5,7 +5,8 @@ from pathlib import Path
 def clip_video_segments(
     video_path: str,
     segments: list[tuple[str | float, str | float]],
-    output_file: str
+    output_file: str,
+    padding: float = 0.0
 ) -> Path:
     """
     Clips multiple segments from a video and concatenates them into a single file.
@@ -14,6 +15,7 @@ def clip_video_segments(
         video_path: Path to the source video file.
         segments: List of (start_time, end_time) tuples.
         output_file: Path where the concatenated video will be saved.
+        padding: Time in seconds to add before and after each segment (default 0.0).
 
     Returns:
         Path: The path to the created output file.
@@ -41,13 +43,20 @@ def clip_video_segments(
         for i, (start, end) in enumerate(segments, 1):
             # Skip zero-duration segments to avoid ffmpeg errors
             try:
-                if float(start) == float(end):
-                    print(f"Skipping zero-duration segment: {start} -> {end}")
+                s_val = float(start)
+                e_val = float(end)
+                
+                # Apply padding (default is 0.0 now for high precision)
+                s_padded = max(0, s_val - padding)
+                e_padded = e_val + padding
+                
+                if abs(s_padded - e_padded) < 0.001:
+                    print(f"Skipping effectively zero-duration segment: {start} -> {end}")
                     continue
             except ValueError:
-                # If they are in HH:MM:SS format, this check is harder but 
-                # usually LLM gives raw seconds now. For now, just catch.
-                pass
+                # Fallback for HH:MM:SS format
+                s_padded = start
+                e_padded = end
 
             clip_path = temp_dir / f"clip_{i}{video_path_obj.suffix}"
             
@@ -55,8 +64,8 @@ def clip_video_segments(
             command = [
                 "ffmpeg", "-y",
                 "-i", str(video_path_obj),
-                "-ss", str(start),
-                "-to", str(end),
+                "-ss", str(s_padded),
+                "-to", str(e_padded),
                 "-c:v", "libx264",
                 "-c:a", "aac",
                 str(clip_path)
