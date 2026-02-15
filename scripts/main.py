@@ -80,6 +80,10 @@ def main():
         # 7. Match lines back to original Whisper segments for precise timestamps
         print(f"Matching {len(lines)} lines to original Whisper segments...")
         matched = match_lines_to_segments(lines, whisper_segments)
+        if matched:
+            print(f"  Matched {len(matched)} segments (before merging):")
+            for start, end, text in matched:
+                print(f"    [{start} -> {end}] {text.strip()}")
         
         if matched:
             # Convert to (start, end) tuples and merge overlapping segments
