@@ -1,31 +1,17 @@
-def build_prompt(query, retrieved_chunks):
-    """Constructs the augmented prompt for the LLM. Timestamps are excluded
-    so the LLM focuses only on selecting verbatim text."""
-    context = ""
-    for chunk in retrieved_chunks:
-        # Use per-segment text if available, otherwise fall back to chunk-level
-        if chunk.get('segments'):
-            for seg in chunk['segments']:
-                context += f"{seg['text']}\n"
-            context += "\n"
-        else:
-            context += f"{chunk['text']}\n\n"
-
+def build_prompt(transcript_text):
+    """Constructs the prompt for extracting key moments from the full transcript."""
     return f"""
-You are an assistant answering questions strictly based on the provided transcript context.
+You are an expert video editor and content strategist. Your task is to identify the most engaging, interesting, and viral-worthy moments from the provided transcript.
 
-Transcript context:
-{context}
-
-Question:
-{query}
+Transcript:
+{transcript_text}
 
 Instructions:
-- Use the EXACT VERBATIM lines as they appear in the transcript.
+- Identify 3-5 distinct "Key Moments" or "Highlights".
+- These should be standalone segments that are funny, insightful, surprising, or highly engaging.
+- For each moment, provide the EXACT VERBATIM text from the transcript.
 - DO NOT paraphrase, summarize, or modify the transcript text in any way.
-- DO NOT include any timestamps in your answer.
-- Each bullet point must be an exact, unmodified quote from the transcript.
-- If the answer is not present, say "Not mentioned in the video."
+- DO NOT include timestamps.
 - Format as a bulleted list using "- " prefix.
 """
 

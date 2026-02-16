@@ -22,6 +22,7 @@ def chunk_transcript(segments, max_tokens=150, overlap_tokens=30):
     """
     Splits transcript segments into overlapping chunks based on token count.
     """
+    segments = segments or []
     data = []
     current_chunks = []
     current_tokens = 0
