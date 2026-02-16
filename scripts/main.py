@@ -30,10 +30,12 @@ def main():
         print(f"Error extracting audio: {e}")
         return
 
-    # 2. Transcribe
+    # 2. Transcribe with AssemblyAI (word-level timestamps)
     try:
-        transcription_data = get_cached_transcription(audio_path, client, str(cache_dir))
+        transcription_data = get_cached_transcription(audio_path, api_key=None, cache_dir=str(cache_dir))
         whisper_segments = transcription_data.get("segments") or []
+        words = transcription_data.get("words") or []  # Word-level timestamps from AssemblyAI
+        print(f"Transcription complete: {len(whisper_segments)} segments, {len(words)} words")
     except Exception as e:
         print(f"Error transcribing audio: {e}")
         return
@@ -64,9 +66,9 @@ def main():
             print()
             continue
         
-        # 6. Match lines back to original Whisper segments for precise timestamps
-        print(f"Matching {len(lines)} lines to original Whisper segments...")
-        matched = match_lines_to_segments(lines, whisper_segments)
+        # 6. Match lines to words/segments for precise timestamps
+        print(f"Matching {len(lines)} lines to transcript...")
+        matched = match_lines_to_segments(lines, whisper_segments, words=words)
         if matched:
             print(f"  Matched {len(matched)} segments (before merging):")
             for start, end, text in matched:

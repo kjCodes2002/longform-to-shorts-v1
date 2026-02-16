@@ -1,6 +1,12 @@
 import re
 from difflib import SequenceMatcher
 
+try:
+    from word_matcher import match_phrases_to_words
+except ImportError:
+    # Fallback for when running as module
+    from scripts.word_matcher import match_phrases_to_words
+
 
 def extract_lines_from_answer(answer_text: str) -> list[str]:
     """
@@ -33,21 +39,31 @@ def extract_lines_from_answer(answer_text: str) -> list[str]:
 def match_lines_to_segments(
     lines: list[str],
     whisper_segments: list[dict],
+    words: list[dict] = None,
     threshold: float = 0.5,
 ) -> list[tuple[float, float, str]]:
     """
-    Matches each LLM-output line to the original Whisper segments using
-    substring and fuzzy matching. Returns the original Whisper timestamps.
+    Matches each LLM-output line to the transcript using word-level timestamps
+    (if available) or segment-level matching (fallback).
 
     Args:
         lines: Verbatim text lines extracted from the LLM answer.
-        whisper_segments: The raw Whisper segments list (each has 'start', 'end', 'text').
+        whisper_segments: The raw segments list (for compatibility/fallback).
+        words: Optional list of word dicts with 'text', 'start', 'end', 'confidence'.
+               If provided, uses precise word-level matching.
         threshold: Minimum similarity ratio to consider a match.
 
     Returns:
         list[tuple[float, float, str]]: List of (start, end, matched_text) using
-        the original Whisper timestamps.
+        precise timestamps.
     """
+    # Prefer word-level matching if words are available
+    if words:
+        print(f"  Using word-level matching for {len(lines)} phrases...")
+        return match_phrases_to_words(lines, words, threshold=threshold)
+    
+    # Fallback to segment-level matching
+    print(f"  Using segment-level matching for {len(lines)} phrases...")
     results = []
 
     for line in lines:
