@@ -63,10 +63,12 @@ def clip_video_segments(
             # Re-encode to ensure consistent streams for concatenation
             command = [
                 "ffmpeg", "-y",
-                "-i", str(video_path_obj),
                 "-ss", str(s_padded),
-                "-to", str(e_padded),
+                "-t", str(max(0.1, e_val - s_val)), # Use -t for duration, more robust
+                "-i", str(video_path_obj),
+                "-map_metadata", "-1",
                 "-c:v", "libx264",
+                "-preset", "ultrafast",
                 "-c:a", "aac",
                 str(clip_path)
             ]

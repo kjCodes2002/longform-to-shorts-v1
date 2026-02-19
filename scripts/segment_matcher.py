@@ -8,25 +8,32 @@ except ImportError:
     from scripts.word_matcher import match_phrases_to_words
 
 
-def extract_lines_from_answer(answer_text: str) -> list[str]:
+def extract_lines_from_answer(answer: str | list[str]) -> list[str]:
     """
-    Extracts verbatim text lines from the LLM's bulleted answer.
-    Strips bullet markers, quotes, and timestamps.
+    Extracts verbatim text lines from the LLM's answer.
+    Handles both raw string (bulleted) and list of strings (JSON mode).
 
     Args:
-        answer_text: The raw LLM output.
+        answer: The raw LLM output (string) or a list of lines.
 
     Returns:
         list[str]: Cleaned text lines.
     """
+    if isinstance(answer, list):
+        # Already a list, just clean the lines
+        return [l.strip() for l in answer if l.strip()]
+
     lines = []
-    for line in answer_text.strip().split("\n"):
+    for line in answer.strip().split("\n"):
         line = line.strip()
         # Skip empty lines and non-bullet lines
-        if not line or not line.startswith("-"):
+        if not line:
             continue
-        # Remove bullet marker
-        line = line.lstrip("-").strip()
+        
+        # If it starts with a bullet, remove it
+        if line.startswith("-") or line.startswith("*"):
+            line = line[1:].strip()
+            
         # Remove surrounding quotes if present
         line = line.strip('"').strip("'").strip("\u201c").strip("\u201d").strip()
         # Remove any trailing timestamp patterns like [0.0s – 7.8s]

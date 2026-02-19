@@ -1,3 +1,6 @@
+import asyncio
+import json
+
 def build_prompt(transcript_text):
     """Constructs the prompt for extracting key moments from the full transcript."""
     return f"""
@@ -12,29 +15,53 @@ Instructions:
 - For each moment, provide the EXACT VERBATIM text from the transcript.
 - DO NOT paraphrase, summarize, or modify the transcript text in any way.
 - DO NOT include timestamps.
-- Format as a bulleted list using "- " prefix.
+
+Return the result as a JSON object with a 'highlights' key containing a list of strings.
+Example:
+{{
+  "highlights": [
+    "verbatim text line 1",
+    "verbatim text line 2"
+  ]
+}}
 """
 
-def ask_llm(prompt, client, model="gpt-4o-mini", temperature=0.7):
-    """Sends prompt to OpenAI Chat API."""
-    response = client.chat.completions.create(
+async def ask_llm_async(prompt, client, model="gpt-4o-mini", temperature=0.7):
+    """Sends prompt to OpenAI Chat API asynchronously with JSON mode."""
+    response = await client.chat.completions.create(
         model=model,
         temperature=temperature,
+        response_format={"type": "json_object"},
         messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "system", "content": "You are a helpful assistant that outputs JSON."},
             {"role": "user", "content": prompt}
         ]
     )
-    return response.choices[0].message.content
+    content = response.choices[0].message.content
+    try:
+        return json.loads(content).get("highlights", [])
+    except json.JSONDecodeError:
+        print(f"Error decoding JSON from LLM: {content}")
+        return []
 
-def get_multiple_answers(prompt, client, n_answers=3, model="gpt-4o-mini", temperature=0.7):
+async def get_multiple_answers_async(prompt, client, n_answers=3, model="gpt-4o-mini", temperature=0.7):
     """
-    Calls the LLM n_answers times with temperature to generate
-    diverse, full-length answers for the user to compare.
+    Calls the LLM n_answers times in parallel using asyncio.
     """
-    answers = []
+    tasks = []
     for i in range(n_answers):
-        print(f"  Generating answer {i + 1}/{n_answers}...")
-        answer = ask_llm(prompt, client, model=model, temperature=temperature)
-        answers.append(answer)
-    return answers
+        tasks.append(ask_llm_async(prompt, client, model=model, temperature=temperature))
+    
+    print(f"  Generating {n_answers} highlight sets in parallel...")
+    results = await asyncio.gather(*tasks)
+    return results
+
+# Keep synchronous versions for backward compatibility if needed, 
+# but they will just wrap the async ones for simplicity in this transition
+def ask_llm(prompt, client, model="gpt-4o-mini", temperature=0.7):
+    import asyncio
+    return asyncio.run(ask_llm_async(prompt, client, model, temperature))
+
+def get_multiple_answers(prompt, client, n_answers=1, model="gpt-4o-mini", temperature=0.7):
+    import asyncio
+    return asyncio.run(get_multiple_answers_async(prompt, client, n_answers, model, temperature))

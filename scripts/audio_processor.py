@@ -17,7 +17,9 @@ def extract_audio(video_path: str, output_dir="audio") -> Path:
         "ffmpeg",
         "-y",
         "-i", str(video_path_obj),
-        "-vn",
+        "-vn",          # No video
+        "-sn",          # No subtitles
+        "-dn",          # No data
         "-ac", "1",
         "-ar", "16000",
         "-acodec", "pcm_s16le",
