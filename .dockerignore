@@ -1,0 +1,27 @@
+# Virtual environment
+myenv/
+
+# Media files (not needed in the image)
+video/
+audio/
+clipped/
+
+# Cache and temp
+.cache/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Git and OS
+.git/
+.gitignore
+.DS_Store
+
+# Env file (secrets injected via Render dashboard)
+.env
+
+# Experiments (not production code)
+experiments/
+
+# Docs
+*.md
