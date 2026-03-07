@@ -22,6 +22,7 @@ async def run_pipeline(
     n_answers: int = 1,
     model: str = "gpt-4o-mini",
     temperature: float = 0.7,
+    work_dir: str | None = None,
 ) -> dict:
     """
     Run the full longform-to-shorts pipeline.
@@ -31,6 +32,8 @@ async def run_pipeline(
         n_answers: Number of highlight sets to generate.
         model: OpenAI model to use.
         temperature: LLM temperature for generation.
+        work_dir: Optional working directory for intermediate/output files.
+                  If None, uses the project root (backward compatible for CLI).
 
     Returns:
         dict with keys:
@@ -45,9 +48,11 @@ async def run_pipeline(
     if not video_path_obj.is_absolute():
         video_path_obj = project_root / video_path_obj
 
-    audio_dir = project_root / "audio"
-    cache_dir = project_root / ".cache"
-    clipped_dir = project_root / "clipped"
+    # Use work_dir if provided, otherwise fall back to project root
+    base_dir = Path(work_dir) if work_dir else project_root
+    audio_dir = base_dir / "audio"
+    cache_dir = base_dir / ".cache"
+    clipped_dir = base_dir / "clipped"
 
     result = {"status": "ok", "clips": [], "errors": []}
 

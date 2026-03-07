@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from server.routes.pipeline import router as pipeline_router
+from server.routes.clips import router as clips_router
 
 # Load environment variables
 load_dotenv()
@@ -37,6 +38,7 @@ app.add_middleware(
 
 # Mount routes
 app.include_router(pipeline_router, prefix="/api")
+app.include_router(clips_router, prefix="/api")
 
 
 @app.get("/api/health")
