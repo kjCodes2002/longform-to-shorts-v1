@@ -1,4 +1,5 @@
 import type { ClipResult } from '../types';
+import { getClipUrl } from '../api/processVideo';
 
 interface ClipCardProps {
   clip: ClipResult;
@@ -24,7 +25,7 @@ export default function ClipCard({ clip, index }: ClipCardProps) {
       {/* Video preview */}
       <div className="relative aspect-video bg-bg-secondary">
         <video
-          src={clip.download_url}
+          src={getClipUrl(clip.download_url)}
           className="w-full h-full object-cover"
           controls
           preload="metadata"
@@ -56,7 +57,7 @@ export default function ClipCard({ clip, index }: ClipCardProps) {
 
         {/* Download button */}
         <a
-          href={clip.download_url}
+          href={getClipUrl(clip.download_url)}
           download={clip.filename}
           className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl
                      bg-bg-secondary border border-border text-text-secondary text-sm font-medium
