@@ -110,7 +110,7 @@ async def run_pipeline(
             output_file = clipped_dir / f"highlight_set_{i}.mp4"
             logger.info(f"Creating highlight video: {output_file.name}")
             try:
-                clip_video_segments(str(video_path_obj), merged_segments, str(output_file))
+                clip_video_segments(str(video_path_obj), merged_segments, str(output_file), words=words)
                 logger.info(f"✅ Successfully saved {output_file.name}")
                 result["clips"].append({
                     "path": str(output_file),

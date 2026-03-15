@@ -1,26 +1,38 @@
 import subprocess
 import shutil
+import logging
 from pathlib import Path
+
+from scripts.subtitle_generator import generate_srt
+
+logger = logging.getLogger(__name__)
+
+# Muxing embedded subtitles instead of burn-in to avoid libass dependency.
 
 def clip_video_segments(
     video_path: str,
     segments: list[tuple[str | float, str | float]],
     output_file: str,
-    padding: float = 0.0
+    padding: float = 0.0,
+    words: list[dict] | None = None,
 ) -> Path:
     """
     Clips multiple segments from a video and concatenates them into a single file.
+    Optionally burns SRT subtitles into each clip when *words* are provided.
 
     Args:
         video_path: Path to the source video file.
         segments: List of (start_time, end_time) tuples.
         output_file: Path where the concatenated video will be saved.
         padding: Time in seconds to add before and after each segment (default 0.0).
+        words: Optional list of word dicts (text/start/end/confidence) from
+               the transcriber.  When provided, SRT subtitles are generated
+               and burned into each clip.
 
     Returns:
         Path: The path to the created output file.
     """
-    video_path_obj = Path(video_path)
+    video_path_obj = Path(video_path).resolve()
     if not video_path_obj.exists():
         raise FileNotFoundError(f"Video file not found: {video_path}")
 
@@ -29,7 +41,7 @@ def clip_video_segments(
 
     output_file_path = Path(output_file)
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Use a temp directory in the same parent as output to avoid cross-device moves
     temp_dir = output_file_path.parent / f"temp_{output_file_path.stem}"
     if temp_dir.exists():
@@ -45,11 +57,11 @@ def clip_video_segments(
             try:
                 s_val = float(start)
                 e_val = float(end)
-                
+
                 # Apply padding (default is 0.0 now for high precision)
                 s_padded = max(0, s_val - padding)
                 e_padded = e_val + padding
-                
+
                 if abs(s_padded - e_padded) < 0.001:
                     print(f"Skipping effectively zero-duration segment: {start} -> {end}")
                     continue
@@ -58,22 +70,57 @@ def clip_video_segments(
                 s_padded = start
                 e_padded = end
 
-            clip_path = temp_dir / f"clip_{i}{video_path_obj.suffix}"
-            
-            # Re-encode to ensure consistent streams for concatenation
+            clip_filename = f"clip_{i}{video_path_obj.suffix}"
+            clip_path = temp_dir / clip_filename
+
+            # --- Build FFmpeg command ---
+            # Base: input 0 (video)
             command = [
                 "ffmpeg", "-y",
                 "-ss", str(s_padded),
-                "-t", str(max(0.1, e_val - s_val)), # Use -t for duration, more robust
+                "-t", str(max(0.1, e_val - s_val)),
                 "-i", str(video_path_obj),
+            ]
+
+            # If words supplied, generate SRT and add as input 1
+            if words:
+                srt_filename = f"clip_{i}.srt"
+                srt_path = temp_dir / srt_filename
+                generate_srt(words, s_padded, e_padded, srt_path)
+
+                # Add SRT as second input and map both video/audio and subtitles
+                command += [
+                    "-i", srt_filename,
+                    "-map", "0:v",
+                    "-map", "0:a",
+                    "-map", "1:s",
+                ]
+            else:
+                command += [
+                    "-map", "0:v",
+                    "-map", "0:a",
+                ]
+
+            command += [
                 "-map_metadata", "-1",
                 "-c:v", "libx264",
                 "-preset", "ultrafast",
                 "-c:a", "aac",
-                str(clip_path)
             ]
-            
-            subprocess.run(command, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            if words:
+                command += ["-c:s", "mov_text"]  # MP4 embedded subtitles codec
+                logger.info(f"  Embedding subtitles into clip {i} from {srt_filename}")
+
+            command += [str(clip_path)]
+
+            # Run with cwd=temp_dir so the subtitles filter resolves the
+            # SRT filename without needing absolute-path escaping.
+            subprocess.run(
+                command, check=True,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                cwd=str(temp_dir),
+            )
             clipped_paths.append(clip_path)
 
         if not clipped_paths:
@@ -93,12 +140,13 @@ def clip_video_segments(
             "-f", "concat",
             "-safe", "0",
             "-i", str(concat_list_path),
+            "-map", "0",     # Map all streams (video, audio, subtitles)
             "-c", "copy",
-            str(output_file_path)
+            str(output_file_path),
         ]
-        
+
         subprocess.run(command_concat, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
+
         return output_file_path
 
     finally:
