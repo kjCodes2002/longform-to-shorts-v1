@@ -17,18 +17,18 @@ export default function ClipCard({ clip, index }: ClipCardProps) {
 
   return (
     <div
-      className="group bg-bg-card rounded-2xl border border-border overflow-hidden
+      className="group bg-bg-card rounded-2xl border border-border
                  transition-all duration-300 hover:border-emerald/30 hover:bg-bg-card-hover
                  animate-slide-up"
       style={{ animationDelay: `${index * 100}ms`, animationFillMode: 'backwards' }}
     >
       {/* Video preview */}
-      <div className="relative aspect-video bg-bg-secondary">
+     <div className="bg-bg-secondary rounded-t-2xl">
         <video
           src={getClipUrl(clip.download_url)}
-          className="w-full h-full object-cover"
           controls
           preload="metadata"
+          className="w-full h-auto object-contain bg-[#141414]"
         />
       </div>
 
