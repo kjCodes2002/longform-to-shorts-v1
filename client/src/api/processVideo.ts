@@ -1,6 +1,7 @@
 import type { ProcessVideoResponse, PipelineSettings } from '../types';
 
-export const API_BASE_URL = "https://longform-to-shorts-v1.onrender.com";
+// export const API_BASE_URL = "https://longform-to-shorts-v1.onrender.com";
+export const API_BASE_URL = "http://localhost:8000";
 
 export async function processVideo(
   file: File,

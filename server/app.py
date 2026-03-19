@@ -4,11 +4,8 @@ Run with: uvicorn server.app:app --reload
 """
 
 import logging
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 
 from server.routes.pipeline import router as pipeline_router
@@ -47,19 +44,3 @@ app.include_router(clips_router, prefix="/api")
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok"}
-
-
-# Serve React frontend (built with Vite)
-CLIENT_DIST = Path(__file__).parent.parent / "client" / "dist"
-
-if CLIENT_DIST.exists():
-    # Serve static assets (JS, CSS, etc.)
-    app.mount("/assets", StaticFiles(directory=str(CLIENT_DIST / "assets")), name="assets")
-
-    # Catch-all: serve index.html for any non-API route (SPA routing)
-    @app.get("/{path:path}")
-    async def serve_frontend(path: str):
-        file_path = CLIENT_DIST / path
-        if file_path.exists() and file_path.is_file():
-            return FileResponse(str(file_path))
-        return FileResponse(str(CLIENT_DIST / "index.html"))
