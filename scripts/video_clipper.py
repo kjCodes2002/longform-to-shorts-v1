@@ -3,11 +3,10 @@ import shutil
 import logging
 from pathlib import Path
 
-from scripts.subtitle_generator import generate_srt
+from scripts.subtitle_generator import generate_ass
 
 logger = logging.getLogger(__name__)
 
-# Muxing embedded subtitles instead of burn-in to avoid libass dependency.
 
 def clip_video_segments(
     video_path: str,
@@ -18,7 +17,7 @@ def clip_video_segments(
 ) -> Path:
     """
     Clips multiple segments from a video and concatenates them into a single file.
-    Optionally burns SRT subtitles into each clip when *words* are provided.
+    When *words* are provided, viral-style ASS captions are burned into each clip.
 
     Args:
         video_path: Path to the source video file.
@@ -26,8 +25,8 @@ def clip_video_segments(
         output_file: Path where the concatenated video will be saved.
         padding: Time in seconds to add before and after each segment (default 0.0).
         words: Optional list of word dicts (text/start/end/confidence) from
-               the transcriber.  When provided, SRT subtitles are generated
-               and burned into each clip.
+               the transcriber.  When provided, ASS captions are generated
+               and burned into each clip via FFmpeg's ass= video filter.
 
     Returns:
         Path: The path to the created output file.
@@ -74,7 +73,6 @@ def clip_video_segments(
             clip_path = temp_dir / clip_filename
 
             # --- Build FFmpeg command ---
-            # Base: input 0 (video)
             command = [
                 "ffmpeg", "-y",
                 "-ss", str(s_padded),
@@ -82,40 +80,30 @@ def clip_video_segments(
                 "-i", str(video_path_obj),
             ]
 
-            # If words supplied, generate SRT and add as input 1
+            # If words supplied, generate ASS and burn into the video
             if words:
-                srt_filename = f"clip_{i}.srt"
-                srt_path = temp_dir / srt_filename
-                generate_srt(words, s_padded, e_padded, srt_path)
+                ass_filename = f"clip_{i}.ass"
+                ass_path = temp_dir / ass_filename
+                generate_ass(words, s_padded, e_padded, ass_path)
 
-                # Add SRT as second input and map both video/audio and subtitles
+                # Burn captions using the ass= video filter
                 command += [
-                    "-i", srt_filename,
-                    "-map", "0:v",
-                    "-map", "0:a",
-                    "-map", "1:s",
+                    "-vf", f"ass={ass_filename}",
                 ]
-            else:
-                command += [
-                    "-map", "0:v",
-                    "-map", "0:a",
-                ]
+                logger.info(f"  Burning ASS captions into clip {i} from {ass_filename}")
 
             command += [
+                "-map", "0:v",
+                "-map", "0:a",
                 "-map_metadata", "-1",
                 "-c:v", "libx264",
                 "-preset", "ultrafast",
                 "-c:a", "aac",
+                str(clip_path),
             ]
 
-            if words:
-                command += ["-c:s", "mov_text"]  # MP4 embedded subtitles codec
-                logger.info(f"  Embedding subtitles into clip {i} from {srt_filename}")
-
-            command += [str(clip_path)]
-
-            # Run with cwd=temp_dir so the subtitles filter resolves the
-            # SRT filename without needing absolute-path escaping.
+            # Run with cwd=temp_dir so the ass= filter resolves the
+            # ASS filename without needing absolute-path escaping.
             subprocess.run(
                 command, check=True,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -140,7 +128,7 @@ def clip_video_segments(
             "-f", "concat",
             "-safe", "0",
             "-i", str(concat_list_path),
-            "-map", "0",     # Map all streams (video, audio, subtitles)
+            "-map", "0",     # Map all streams (video, audio)
             "-c", "copy",
             str(output_file_path),
         ]
@@ -152,3 +140,4 @@ def clip_video_segments(
     finally:
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
+
